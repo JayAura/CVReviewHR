@@ -1,0 +1,173 @@
+{% extends 'layout.html' %}
+
+{% block title %}Upload CVs{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dropzone.min.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h3 class="mb-0"><i class="fas fa-file-upload me-2"></i>Upload CVs for {{ job.title }}</h3>
+                <a href="{{ url_for('job_status', job_id=job.id) }}" class="btn btn-light btn-sm"><i class="fas fa-arrow-left me-1"></i>Back to Job List</a>
+            </div>
+            <div class="card-body">
+                <!-- LLM Status -->
+                <div class="llm-status-container mb-4">
+                    <div class="d-flex align-items-center">
+                        <h5 class="me-2">LLM Connection Status:</h5>
+                        {% if llm_status %}
+                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Connected</span>
+                        {% else %}
+                            <span class="badge bg-danger"><i class="fas fa-exclamation-circle me-1"></i>Not Connected</span>
+                        {% endif %}
+                    </div>
+                    <p class="mb-0 text-muted small">{{ llm_message }}</p>
+                </div>
+
+                {% if llm_status %}
+                <!-- Job Details Summary -->
+                <div class="card mb-4 bg-light">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-info-circle me-2"></i>Job Details</h5>
+                        {% if job.description %}
+                        <p class="card-text">{{ job.description }}</p>
+                        {% endif %}
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <h6>Scoring Weights</h6>
+                                <ul class="list-group">
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        Skills
+                                        <span class="badge bg-primary rounded-pill">{{ job.skills_weight }}</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        Experience
+                                        <span class="badge bg-primary rounded-pill">{{ job.experience_weight }}</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        Education
+                                        <span class="badge bg-primary rounded-pill">{{ job.education_weight }}</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Custom Criteria</h6>
+                                {% if criteria %}
+                                <ul class="list-group">
+                                    {% for criterion in criteria %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        {{ criterion.name }}
+                                        <span class="badge bg-primary rounded-pill">{{ criterion.weight }}</span>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                {% else %}
+                                <p class="text-muted">No custom criteria defined</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Upload Form -->
+                <form id="cv-upload-form" action="{{ url_for('upload_files_for_job', job_id=job.id) }}" method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="job_id" value="{{ job.id }}">
+                    <div class="mb-4">
+                        <label class="form-label">Upload CVs <span class="text-danger">*</span></label>
+                        <div class="dropzone-container">
+                            <div id="cv-dropzone" class="dropzone">
+                                <div class="dz-message needsclick">
+                                    <i class="fas fa-file-upload fa-3x mb-3"></i>
+                                    <h4>Drop files here or click to upload</h4>
+                                    <span class="text-muted">
+                                        (Supported formats: PDF, DOCX, DOC, TXT)<br>
+                                        Upload up to 100 files at once
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="file-count-container mb-3" style="display: none;">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <span id="file-count">0</span> files selected
+                        </div>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="button" id="submit-btn" class="btn btn-primary btn-lg" disabled>
+                            <i class="fas fa-robot me-2"></i>Analyze CVs with Llama 3
+                        </button>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dropzone.min.js') }}"></script>
+<script>
+Dropzone.autoDiscover = false;
+document.addEventListener('DOMContentLoaded', function () {
+    if (Dropzone.instances.length > 0) {
+        Dropzone.instances.forEach(z => z.destroy());
+    }
+    var form = document.getElementById('cv-upload-form');
+    var actionUrl = form.getAttribute('action');
+    var dropzoneElement = document.getElementById('cv-dropzone');
+    var myDropzone = new Dropzone(dropzoneElement, {
+        url: actionUrl,
+        paramName: "files[]",
+        maxFilesize: 16,
+        uploadMultiple: true,
+        parallelUploads: 10,
+        maxFiles: 100,
+        acceptedFiles: ".pdf,.doc,.docx,.txt",
+        addRemoveLinks: true,
+        autoProcessQueue: true,
+        dictDefaultMessage: "Drop files here or click to upload",
+        init: function () {
+            var dz = this;
+            dz.on("addedfile", function () {
+                var fileCount = dz.files.length;
+                document.querySelector('.file-count-container').style.display = '';
+                document.getElementById('file-count').innerText = fileCount;
+                document.getElementById('submit-btn').disabled = false;
+            });
+            dz.on("removedfile", function () {
+                var fileCount = dz.files.length;
+                document.getElementById('file-count').innerText = fileCount;
+                if (fileCount === 0) {
+                    document.querySelector('.file-count-container').style.display = 'none';
+                    document.getElementById('submit-btn').disabled = true;
+                }
+            });
+            dz.on("successmultiple", function (files, response) {
+                if (response && response.session_id) {
+                    window.location.href = "/results/" + response.session_id;
+                }
+            });
+            dz.on("error", function (file, errorMessage, xhr) {
+                let message = errorMessage;
+                if (xhr && xhr.response) {
+                    try {
+                        let json = JSON.parse(xhr.response);
+                        if (json.error) message = json.error;
+                    } catch(e) {}
+                }
+                alert("Upload error: " + message);
+            });
+        }
+    });
+    document.getElementById('submit-btn').addEventListener('click', function() {
+        myDropzone.processQueue();
+    });
+});
+</script>
+{% endblock %}

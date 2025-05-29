@@ -1,0 +1,231 @@
+{% extends 'layout.html' %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% include 'includes/_flashed_messages.html' %}
+            {% endif %}
+        {% endwith %}
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0"><i class="fas fa-file-alt me-2"></i>CV Reviewer</h3>
+            </div>
+            <div class="card-body">
+                <!-- LLM Status -->
+                <div class="llm-status-container mb-4">
+                    <div class="d-flex align-items-center">
+                        <h5 class="me-2">LLM Connection Status:</h5>
+                        {% if llm_status %}
+                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Connected</span>
+                        {% else %}
+                            <span class="badge bg-danger"><i class="fas fa-exclamation-circle me-1"></i>Not Connected</span>
+                        {% endif %}
+                    </div>
+                    <p class="mb-0 text-muted small">{{ llm_message }}</p>
+                </div>
+
+                {% if llm_status %}
+                <!-- Main Actions -->
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-briefcase me-2"></i>CV Reviewer Options</h5>
+                                <p class="card-text">Choose how you want to analyze CVs:</p>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <div class="card h-100 border-primary">
+                                            <div class="card-body">
+                                                <h5 class="card-title"><i class="fas fa-sliders-h me-2"></i>Customized Scoring</h5>
+                                                <p class="card-text">Create a job with custom scoring criteria and weights for more accurate results.</p>
+                                                <a href="{{ url_for('new_job') }}" class="btn btn-primary">
+                                                    <i class="fas fa-plus-circle me-1"></i>Create New Job
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="card h-100">
+                                            <div class="card-body">
+                                                <h5 class="card-title"><i class="fas fa-bolt me-2"></i>Quick Analysis</h5>
+                                                <p class="card-text">Analyze CVs quickly using standard evaluation criteria.</p>
+                                                <button type="button" class="btn btn-secondary" data-bs-toggle="collapse" data-bs-target="#quickUploadForm">
+                                                    <i class="fas fa-file-upload me-1"></i>Quick Upload
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Recent Jobs -->
+                                {% if recent_jobs %}
+                                <div class="mt-4">
+                                    <h5><i class="fas fa-history me-2"></i>Recent Jobs</h5>
+                                    <div class="list-group">
+                                        {% for job in recent_jobs %}
+                                        <a href="{{ url_for('upload_for_job', job_id=job.id) }}" class="list-group-item list-group-item-action">
+                                            <div class="d-flex w-100 justify-content-between">
+                                                <h6 class="mb-1">{{ job.title }}</h6>
+                                                <small>{{ job.created_at.strftime('%Y-%m-%d') }}</small>
+                                            </div>
+                                            {% if job.description %}
+                                            <small class="text-muted">{{ job.description[:100] }}{% if job.description|length > 100 %}...{% endif %}</small>
+                                            {% endif %}
+                                        </a>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Quick Upload Form (Collapsed by default) -->
+                <div class="collapse mb-4" id="quickUploadForm">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">
+                            <h4 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick CV Analysis</h4>
+                        </div>
+                        <div class="card-body">
+                            <form id="quick-cv-upload-form" action="{{ url_for('upload_files') }}" method="POST" enctype="multipart/form-data">
+                                <div class="mb-4">
+                                    <label for="job_title" class="form-label">Job Title <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-briefcase"></i></span>
+                                        <input type="text" class="form-control" id="job_title" name="job_title" 
+                                            placeholder="e.g., Software Engineer, Data Scientist, Marketing Manager" required>
+                                    </div>
+                                    <div class="form-text">Specify the job title to analyze the CVs against</div>
+                                </div>
+                                
+                                <div class="mb-4">
+                                    <label class="form-label">Upload CVs <span class="text-danger">*</span></label>
+                                    <div class="dropzone-container">
+                                        <div id="quick-cv-dropzone" class="dropzone">
+                                            <div class="dz-message needsclick">
+                                                <i class="fas fa-file-upload fa-3x mb-3"></i>
+                                                <h4>Drop files here or click to upload</h4>
+                                                <span class="text-muted">
+                                                    (Supported formats: PDF, DOCX, DOC, TXT)<br>
+                                                    Upload up to 50 files at once
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="file-count-container mb-3" style="display: none;">
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        <span id="file-count">0</span> files selected
+                                    </div>
+                                </div>
+                                
+                                <div class="d-grid gap-2">
+                                    <button type="button" id="quick-submit-btn" class="btn btn-primary btn-lg" disabled>
+                                        <i class="fas fa-robot me-2"></i>Analyze CVs with Llama 3
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if not llm_status %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Warning:</strong> The application is not connected to the Llama 3 LLM.
+                    CV processing will not be possible until the connection is established.
+                    <button id="retry-connection" class="btn btn-sm btn-warning ms-2">Retry Connection</button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card shadow mt-4">
+            <div class="card-header bg-secondary text-white">
+                <h4 class="mb-0"><i class="fas fa-info-circle me-2"></i>About CV Reviewer</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-cogs me-2"></i>Features</h5>
+                        <ul class="list-group mb-3">
+                            <li class="list-group-item"><i class="fas fa-check-circle text-success me-2"></i>Process multiple CVs in batch (50+)</li>
+                            <li class="list-group-item"><i class="fas fa-check-circle text-success me-2"></i>Score candidates from 0-100</li>
+                            <li class="list-group-item"><i class="fas fa-check-circle text-success me-2"></i>Highlight candidates scoring 80% or above</li>
+                            <li class="list-group-item"><i class="fas fa-check-circle text-success me-2"></i>Generate professional HR-style reviews</li>
+                            <li class="list-group-item"><i class="fas fa-check-circle text-success me-2"></i>Create tailored interview questions</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-lightbulb me-2"></i>How It Works</h5>
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <ol class="mb-0">
+                                    <li>Upload multiple CV files (PDF, DOCX, DOC, TXT)</li>
+                                    <li>Specify the job title you're hiring for</li>
+                                    <li>The system connects to a local Llama 3 LLM</li>
+                                    <li>Each CV is analyzed against the job requirements</li>
+                                    <li>Review detailed reports and interview questions</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dropzone-config.js') }}"></script>
+<script>
+    // LLM connection retry
+    document.getElementById('retry-connection')?.addEventListener('click', function() {
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Retrying...';
+        
+        fetch('/test_llm')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status) {
+                    // Connection successful
+                    document.querySelector('.llm-status-container').innerHTML = `
+                        <div class="d-flex align-items-center">
+                            <h5 class="me-2">LLM Connection Status:</h5>
+                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Connected</span>
+                        </div>
+                        <p class="mb-0 text-muted small">${data.message}</p>
+                    `;
+                    
+                    // Reload the page to show the upload form
+                    window.location.reload();
+                } else {
+                    // Connection failed
+                    this.disabled = false;
+                    this.innerHTML = 'Retry Connection';
+                    
+                    document.querySelector('.llm-status-container').innerHTML = `
+                        <div class="d-flex align-items-center">
+                            <h5 class="me-2">LLM Connection Status:</h5>
+                            <span class="badge bg-danger"><i class="fas fa-exclamation-circle me-1"></i>Not Connected</span>
+                        </div>
+                        <p class="mb-0 text-muted small">${data.message}</p>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error testing LLM connection:', error);
+                this.disabled = false;
+                this.innerHTML = 'Retry Connection';
+            });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,13 @@
+.dropzone {
+    border: 2px dashed #ccc;
+    border-radius: 5px;
+    background: white;
+    min-height: 150px;
+    padding: 20px;
+    text-align: center;
+    color: #aaa;
+    cursor: pointer;
+}
+.dropzone.dz-drag-hover {
+    border-color: #007bff;
+}

@@ -1,0 +1,543 @@
+{% extends 'layout.html' %}
+
+{% block title %}Results{% endblock %}
+
+{% block head %}
+<style>
+    .score-badge {
+        font-size: 1.2rem;
+        padding: 0.3rem 0.6rem;
+    }
+    
+    .cv-card {
+        transition: transform 0.2s;
+    }
+    
+    .cv-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    .progress-bar-animated {
+        animation: progress-bar-stripes 1s linear infinite;
+    }
+    
+    .interview-question {
+        background-color: rgba(0, 123, 255, 0.1);
+        border-left: 4px solid #007bff;
+        padding: 10px 15px;
+        margin-bottom: 10px;
+        border-radius: 4px;
+    }
+    
+    .chart-container {
+        height: 300px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-12">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h3 class="mb-0"><i class="fas fa-poll me-2"></i>CV Analysis Results</h3>
+                <a href="{{ url_for('job_status') }}" class="btn btn-light btn-sm"><i class="fas fa-list-alt me-1"></i>Back to Job List</a>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <h4><i class="fas fa-briefcase me-2"></i>Job Title: <span class="text-primary" id="job-title">{{ job_title }}</span></h4>
+                        <p class="mb-0">
+                            <span class="badge bg-info me-1"><i class="fas fa-file-alt me-1"></i>Total CVs: <span id="total-count">{{ total }}</span></span>
+                            <span class="badge bg-success me-1 d-none" id="qualified-badge"><i class="fas fa-check-circle me-1"></i>Qualified: <span id="qualified-count">0</span></span>
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <!-- Processing status -->
+                        <div id="processing-status">
+                            <h5>Processing Status: 
+                                {% if status == 'processing' %}
+                                    <span class="badge bg-warning"><i class="fas fa-spinner fa-spin me-1"></i>Processing</span>
+                                {% elif status == 'completed' %}
+                                    <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Completed</span>
+                                {% else %}
+                                    <span class="badge bg-danger"><i class="fas fa-exclamation-circle me-1"></i>Error</span>
+                                {% endif %}
+                            </h5>
+                            
+                            {% if status == 'processing' %}
+                            <div class="progress" style="height: 25px;">
+                                <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                                     role="progressbar" style="width: {{ (completed / total * 100) | round }}%;">
+                                    <span id="progress-text">{{ completed }} / {{ total }} ({{ (completed / total * 100) | round }}%)</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Loading spinner for initial load -->
+                <div id="loading-container" class="text-center my-5 {% if status == 'completed' %}d-none{% endif %}">
+                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h4 class="mt-3">Analyzing CVs with Llama 3...</h4>
+                    <p class="text-muted">This might take a few minutes for large batches</p>
+                </div>
+                
+                <!-- Results container (hidden until processing completes) -->
+                <div id="results-container" class="{% if status != 'completed' %}d-none{% endif %}">
+                    <!-- Score Distribution Chart -->
+                    <div class="row mb-4">
+                        <div class="col-lg-8 mx-auto">
+                            <div class="card shadow-sm">
+                                <div class="card-header bg-dark">
+                                    <h5 class="mb-0 text-white"><i class="fas fa-chart-bar me-2"></i>Score Distribution</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="chart-container">
+                                        <canvas id="scoreDistributionChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tab Navigation -->
+                    <ul class="nav nav-tabs mb-4" id="resultsTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="qualified-tab" data-bs-toggle="tab" data-bs-target="#qualified" type="button" role="tab">
+                                <i class="fas fa-trophy me-1"></i>Qualified <span class="badge bg-primary rounded-pill" id="qualified-tab-count">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="borderline-tab" data-bs-toggle="tab" data-bs-target="#borderline" type="button" role="tab">
+                                <i class="fas fa-question-circle me-1"></i>Borderline <span class="badge bg-primary rounded-pill" id="borderline-tab-count">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="unqualified-tab" data-bs-toggle="tab" data-bs-target="#unqualified" type="button" role="tab">
+                                <i class="fas fa-times-circle me-1"></i>Unqualified <span class="badge bg-primary rounded-pill" id="unqualified-tab-count">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="errors-tab" data-bs-toggle="tab" data-bs-target="#errors" type="button" role="tab">
+                                <i class="fas fa-exclamation-triangle me-1"></i>Errors <span class="badge bg-primary rounded-pill" id="errors-tab-count">0</span>
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <!-- Tab Content -->
+                    <div class="tab-content" id="resultsTabContent">
+                        <!-- Qualified Candidates (80+) -->
+                        <div class="tab-pane fade show active" id="qualified" role="tabpanel">
+                            <div class="qualified-container">
+                                <div class="alert alert-info" id="no-qualified-message">
+                                    <i class="fas fa-info-circle me-2"></i>No qualified candidates found yet.
+                                </div>
+                                <div class="row" id="qualified-candidates"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Borderline Candidates (60-79) -->
+                        <div class="tab-pane fade" id="borderline" role="tabpanel">
+                            <div class="borderline-container">
+                                <div class="alert alert-info" id="no-borderline-message">
+                                    <i class="fas fa-info-circle me-2"></i>No borderline candidates found yet.
+                                </div>
+                                <div class="row" id="borderline-candidates"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Unqualified Candidates (<60) -->
+                        <div class="tab-pane fade" id="unqualified" role="tabpanel">
+                            <div class="unqualified-container">
+                                <div class="alert alert-info" id="no-unqualified-message">
+                                    <i class="fas fa-info-circle me-2"></i>No unqualified candidates found yet.
+                                </div>
+                                <div class="row" id="unqualified-candidates"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Error Cases -->
+                        <div class="tab-pane fade" id="errors" role="tabpanel">
+                            <div class="errors-container">
+                                <div class="alert alert-info" id="no-errors-message">
+                                    <i class="fas fa-info-circle me-2"></i>No processing errors found.
+                                </div>
+                                <div id="error-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CV Detail Modal -->
+<div class="modal fade" id="cvDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modal-title">CV Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+    // Job ID and status
+    const jobId = "{{ job_id }}";
+    let jobStatus = "{{ status }}";
+    let pollingInterval;
+    
+    // Function to update progress
+    function updateProgress(completed, total) {
+        const percent = Math.round((completed / total) * 100);
+        $('#progress-bar').css('width', percent + '%');
+        $('#progress-text').text(`${completed} / ${total} (${percent}%)`);
+        
+        // Update counts
+        $('#total-count').text(total);
+    }
+    
+    // Function to check job status
+    function checkJobStatus() {
+        fetch(`/job_status/${jobId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'completed') {
+                    // Job completed
+                    clearInterval(pollingInterval);
+                    jobStatus = 'completed';
+                    
+                    // Update UI
+                    $('#processing-status').html(`
+                        <h5>Processing Status: 
+                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Completed</span>
+                        </h5>
+                    `);
+                    
+                    // Hide loading, show results
+                    $('#loading-container').addClass('d-none');
+                    $('#results-container').removeClass('d-none');
+                    
+                    // Fetch results
+                    fetchResults();
+                    
+                } else if (data.status === 'error') {
+                    // Job failed
+                    clearInterval(pollingInterval);
+                    jobStatus = 'error';
+                    
+                    // Update UI
+                    $('#processing-status').html(`
+                        <h5>Processing Status: 
+                            <span class="badge bg-danger"><i class="fas fa-exclamation-circle me-1"></i>Error</span>
+                        </h5>
+                        <div class="alert alert-danger mt-2">
+                            <strong>Error:</strong> ${data.error_message || 'An unknown error occurred'}
+                        </div>
+                    `);
+                    
+                    // Hide loading
+                    $('#loading-container').addClass('d-none');
+                    
+                } else {
+                    // Job still processing
+                    updateProgress(data.completed, data.total);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching job status:', error);
+            });
+    }
+    
+    // Function to fetch and display results
+    function fetchResults() {
+        fetch(`/job_results/${jobId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'completed') {
+                    // Process and display results
+                    processResults(data.results, data.job_title);
+                } else {
+                    console.error('Job is not complete yet');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching job results:', error);
+            });
+    }
+    
+    // Function to process and display results
+    function processResults(results, jobTitle) {
+        // Categorize results
+        const qualified = [];
+        const borderline = [];
+        const unqualified = [];
+        const errors = [];
+        const scores = [];
+        
+        for (const [filename, result] of Object.entries(results)) {
+            if (result.status === 'error') {
+                errors.push(result);
+                continue;
+            }
+            
+            const score = result.score || 0;
+            scores.push(score);
+            
+            if (score >= 80) {
+                qualified.push(result);
+            } else if (score >= 60) {
+                borderline.push(result);
+            } else {
+                unqualified.push(result);
+            }
+        }
+        
+        // Sort categories by score (descending)
+        qualified.sort((a, b) => b.score - a.score);
+        borderline.sort((a, b) => b.score - a.score);
+        unqualified.sort((a, b) => b.score - a.score);
+        
+        // Update counts
+        $('#qualified-tab-count').text(qualified.length);
+        $('#borderline-tab-count').text(borderline.length);
+        $('#unqualified-tab-count').text(unqualified.length);
+        $('#errors-tab-count').text(errors.length);
+        
+        // Show qualified count in header if there are any
+        if (qualified.length > 0) {
+            $('#qualified-badge').removeClass('d-none');
+            $('#qualified-count').text(qualified.length);
+        }
+        
+        // Render candidates in each category
+        renderCandidates('qualified-candidates', qualified, 'no-qualified-message');
+        renderCandidates('borderline-candidates', borderline, 'no-borderline-message');
+        renderCandidates('unqualified-candidates', unqualified, 'no-unqualified-message');
+        renderErrors('error-list', errors, 'no-errors-message');
+        
+        // Render the score distribution chart
+        renderScoreChart(scores);
+    }
+    
+    // Function to render a group of candidates
+    function renderCandidates(containerId, candidates, emptyMessageId) {
+        const container = $(`#${containerId}`);
+        
+        if (candidates.length === 0) {
+            $(`#${emptyMessageId}`).show();
+            return;
+        }
+        
+        $(`#${emptyMessageId}`).hide();
+        
+        candidates.forEach(candidate => {
+            const scoreClass = getScoreClass(candidate.score);
+            const strengthsList = candidate.strengths?.map(s => `<li>${s}</li>`).join('') || '';
+            
+            const cardHtml = `
+                <div class="col-lg-6 mb-4">
+                    <div class="card cv-card shadow-sm h-100" data-filename="${candidate.filename}">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 text-truncate" title="${candidate.filename}">${candidate.filename}</h5>
+                            <span class="badge ${scoreClass} score-badge">${candidate.score}/100</span>
+                        </div>
+                        <div class="card-body">
+                            <h6 class="card-subtitle mb-2 text-muted">Key Strengths:</h6>
+                            <ul class="mb-3">
+                                ${strengthsList}
+                            </ul>
+                            <p class="card-text">
+                                <strong>Recommendation:</strong> ${candidate.recommendation || 'No recommendation provided'}
+                            </p>
+                        </div>
+                        <div class="card-footer bg-transparent">
+                            <button class="btn btn-primary btn-sm view-details-btn" data-filename="${candidate.filename}">
+                                <i class="fas fa-search me-1"></i>View Details
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            container.append(cardHtml);
+        });
+        
+        // Add event listeners to view details buttons
+        $('.view-details-btn').on('click', function() {
+            const filename = $(this).data('filename');
+            showCandidateDetails(filename);
+        });
+    }
+    
+    // Function to render error messages
+    function renderErrors(containerId, errors, emptyMessageId) {
+        const container = $(`#${containerId}`);
+        
+        if (errors.length === 0) {
+            $(`#${emptyMessageId}`).show();
+            return;
+        }
+        
+        $(`#${emptyMessageId}`).hide();
+        
+        errors.forEach(error => {
+            const errorHtml = `
+                <div class="alert alert-danger mb-3">
+                    <h5><i class="fas fa-file-alt me-2"></i>${error.filename || 'Unknown file'}</h5>
+                    <p class="mb-0">${error.error_message || 'An unknown error occurred'}</p>
+                </div>
+            `;
+            
+            container.append(errorHtml);
+        });
+    }
+    
+    // Function to show candidate details in modal
+    function showCandidateDetails(filename) {
+        // Show modal with loading spinner
+        const modal = new bootstrap.Modal(document.getElementById('cvDetailModal'));
+        modal.show();
+        
+        // Set modal title
+        $('#modal-title').text(filename);
+        
+        // Fetch job results
+        fetch(`/job_results/${jobId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'completed') {
+                    const result = data.results[filename];
+                    if (!result) {
+                        $('#modal-body').html('<div class="alert alert-danger">Result not found</div>');
+                        return;
+                    }
+                    
+                    // Format interview questions
+                    const interviewQuestions = result.interview_questions?.map((q, i) => 
+                        `<div class="interview-question">${i+1}. ${q}</div>`
+                    ).join('') || '<p>No interview questions generated</p>';
+                    
+                    // Format strengths and weaknesses
+                    const strengths = result.strengths?.map(s => `<li>${s}</li>`).join('') || '<li>No strengths listed</li>';
+                    const improvements = result.improvement_areas?.map(i => `<li>${i}</li>`).join('') || '<li>No improvement areas listed</li>';
+                    
+                    // Score badge class
+                    const scoreClass = getScoreClass(result.score);
+                    
+                    // Build modal content
+                    const modalContent = `
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <h4>Score: <span class="badge ${scoreClass}">${result.score}/100</span></h4>
+                                <p class="lead">${result.recommendation || 'No recommendation provided'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h5 class="card-title"><i class="fas fa-briefcase me-2"></i>Job Title: ${data.job_title}</h5>
+                                        <p class="card-text text-muted">Analysis of fit for this position</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-header bg-success text-white">
+                                        <h5 class="mb-0"><i class="fas fa-thumbs-up me-2"></i>Key Strengths</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul>${strengths}</ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-header bg-warning">
+                                        <h5 class="mb-0"><i class="fas fa-tools me-2"></i>Areas for Improvement</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul>${improvements}</ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mb-4">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Detailed Analysis</h5>
+                            </div>
+                            <div class="card-body">
+                                <p>${result.detailed_analysis || 'No detailed analysis provided'}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0"><i class="fas fa-question-circle me-2"></i>Suggested Interview Questions</h5>
+                            </div>
+                            <div class="card-body">
+                                ${interviewQuestions}
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Update modal body
+                    $('#modal-body').html(modalContent);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching candidate details:', error);
+                $('#modal-body').html(`
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Error loading details: ${error.message}
+                    </div>
+                `);
+            });
+    }
+    
+    // Function to get score badge class based on score
+    function getScoreClass(score) {
+        if (score >= 80) return 'bg-success';
+        if (score >= 60) return 'bg-warning';
+        return 'bg-danger';
+    }
+    
+    // Start polling for job status if job is still processing
+    $(document).ready(function() {
+        if (jobStatus === 'processing') {
+            // Check immediately, then poll every 2 seconds
+            checkJobStatus();
+            pollingInterval = setInterval(checkJobStatus, 2000);
+        } else if (jobStatus === 'completed') {
+            // Job already completed, fetch results
+            $('#loading-container').addClass('d-none');
+            $('#results-container').removeClass('d-none');
+            fetchResults();
+        }
+    });
+</script>
+{% endblock %}
