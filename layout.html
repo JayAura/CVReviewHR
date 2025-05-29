@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CV Reviewer - {% block title %}{% endblock %}</title>
+      
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+
+    <!-- Bootstrap CSS (local) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-agent-dark-theme.min.css') }}">
+    <!-- Font Awesome CSS (local) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fontawesome.min.css') }}">
+    <!-- Dropzone CSS (local) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dropzone.min.css') }}">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <!-- Your navbar, content, footer, etc. go here. -->
+    {% block content %}{% endblock %}
+
+    <!-- Bootstrap JS Bundle (local) -->
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <!-- jQuery (local) -->
+    <script src="{{ url_for('static', filename='js/jquery-3.6.0.min.js') }}"></script>
+    <!-- Dropzone JS (local) -->
+    <script src="{{ url_for('static', filename='js/dropzone.min.js') }}"></script>
+    <!-- Chart.js (local) -->
+    <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
